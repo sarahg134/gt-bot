@@ -55,14 +55,14 @@ async function getTokenProfiles() {
         console.log('Fetching latest token profiles...');
         const url = 'https://api.dexscreener.com/token-profiles/latest/v1';
         console.log('Request URL:', url);
-        
+
         const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 'Accept': 'application/json'
             }
         });
-        
+
         if (!response.ok) {
             console.error('Response status:', response.status);
             console.error('Response headers:', response.headers);
@@ -70,9 +70,9 @@ async function getTokenProfiles() {
             console.error('Response text:', text.substring(0, 200) + '...'); // First 200 chars
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const jsonData = await response.json();
-        
+
         if (!Array.isArray(jsonData) || jsonData.length === 0) {
             console.error("No valid token data found");
             return [];
@@ -95,16 +95,16 @@ async function getTokenProfiles() {
                     'Accept': 'application/json'
                 }
             });
-            
+
             if (!searchResponse.ok) continue;
-            
+
             const searchResult = await searchResponse.json();
 
-            if (searchResult?.pairs?.[0]?.chainId === 'solana' && 
-                searchResult.pairs[0].marketCap && 
-                (searchResult.pairs[0].quoteToken.symbol === 'USDC' || 
+            if (searchResult?.pairs?.[0]?.chainId === 'solana' &&
+                searchResult.pairs[0].marketCap &&
+                (searchResult.pairs[0].quoteToken.symbol === 'USDC' ||
                  searchResult.pairs[0].quoteToken.symbol === 'SOL')) {
-                
+
                 const pair = searchResult.pairs[0];
                 const tokenData = {
                     address: token.tokenAddress,
@@ -131,9 +131,9 @@ async function getTokenProfiles() {
         const solanaTokens = allPairs
             .filter(token => token.marketCap >= 20000 && token.marketCap < 2000000 && token.liquidity >= 10000)
             .sort((a, b) => (b.liquidity || 0) - (a.liquidity || 0));
-        
+
         console.log(`Found ${solanaTokens.length} suitable Solana tokens\n`);
-        
+
         return solanaTokens;
     } catch (error) {
         console.error('Error fetching token profiles:', error.message);
@@ -160,20 +160,20 @@ async function getDexScreenerInfo(tokenAddress) {
                 'Accept': 'application/json'
             }
         });
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
-        
+
         if (!data.pairs || data.pairs.length === 0) {
             console.log(`No pairs found for token ${tokenAddress}`);
             return null;
         }
-        
+
         // Get the pair with highest liquidity and USDC or SOL as quote token
-        const validPairs = data.pairs.filter(pair => 
+        const validPairs = data.pairs.filter(pair =>
             pair.quoteToken.symbol === 'USDC' || pair.quoteToken.symbol === 'SOL'
         );
 
@@ -182,12 +182,20 @@ async function getDexScreenerInfo(tokenAddress) {
             return null;
         }
 
+        // only buy tokens coming from pumpfun
+        const isPumpFun = data.pairs.find(pair => pair.dexId === 'pumpfun');
+        if(!isPumpFun) {
+            console.log('[Scanner] Token NOT from PUMPFUN skipping...');
+            return null;
+        }
+        console.log('[Scanner] Token is from PUMPFUN returning info');
+
         const mainPair = validPairs.sort((a, b) => {
             const liquidityA = a.liquidity?.usd || 0;
             const liquidityB = b.liquidity?.usd || 0;
             return liquidityB - liquidityA;
         })[0];
-        
+
         return {
             marketCap: mainPair.marketCap || 0,
             priceUsd: parseFloat(mainPair.priceUsd) || 0,
@@ -206,37 +214,37 @@ async function getDexScreenerInfo(tokenAddress) {
 
 function analyzeToken(tokenInfo) {
     let score = 0;
-    
+
     // Market Cap Score (0-30 points)
     if (tokenInfo.marketCap >= 1000000) score += 30;
     else if (tokenInfo.marketCap >= 500000) score += 20;
     else if (tokenInfo.marketCap >= 100000) score += 10;
-    
+
     // Liquidity Score (0-30 points)
     if (tokenInfo.liquidity >= 100000) score += 30;
     else if (tokenInfo.liquidity >= 50000) score += 20;
     else if (tokenInfo.liquidity >= 10000) score += 10;
-    
+
     // Volume Score (0-20 points)
     if (tokenInfo.volume24h >= tokenInfo.marketCap * 0.2) score += 20;
     else if (tokenInfo.volume24h >= tokenInfo.marketCap * 0.1) score += 10;
-    
+
     // Volatility Score (0-20 points)
     const absChange = Math.abs(tokenInfo.priceChange24h);
     if (absChange >= 5 && absChange <= 50) score += 20;
     else if (absChange > 50) score += 10;
-    
+
     return score;
 }
 
 async function findBestToken() {
     console.log('\nStarting token analysis...');
-    
+
     const tokens = await getTokenProfiles();
     let tokenMetrics = [];
-    
+
     console.log(`\nAnalyzing ${tokens.length} tokens for trading opportunities...`);
-    
+
     for (const token of tokens) {
         // Get fresh market data
         const tokenInfo = await getDexScreenerInfo(token.address);
@@ -280,7 +288,7 @@ async function findBestToken() {
         if (token.description) {
             console.log(`Description: ${token.description}`);
         }
-        
+
         tokenMetrics.push({
             token: {
                 address: token.address,
@@ -296,12 +304,12 @@ async function findBestToken() {
             volumePerHour
         });
     }
-    
+
     if (tokenMetrics.length === 0) {
         console.log('No suitable tokens found');
         return null;
     }
-    
+
     // Sort by score and get top 3
     const topTokens = tokenMetrics
         .sort((a, b) => b.score - a.score)
@@ -309,10 +317,10 @@ async function findBestToken() {
 
     console.log('\n=== Top 3 Most Interesting Tokens ===');
     topTokens.forEach((item, index) => {
-        const ageText = item.ageInHours < 1 
-            ? `${Math.round(item.ageInHours * 60)} minutes` 
+        const ageText = item.ageInHours < 1
+            ? `${Math.round(item.ageInHours * 60)} minutes`
             : `${Math.round(item.ageInHours)} hours`;
-        
+
         console.log(`\n${index + 1}. ${item.token.name} (${item.token.symbol})`);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log(`• Age: ${ageText}`);
@@ -328,10 +336,10 @@ async function findBestToken() {
     });
 
     // Select the newest token from top 3
-    const selectedToken = topTokens.reduce((newest, current) => 
+    const selectedToken = topTokens.reduce((newest, current) =>
         current.ageInHours < newest.ageInHours ? current : newest
     , topTokens[0]);
-    
+
     if (selectedToken) {
         console.log('\n=== Selected Token for Purchase ===');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -344,11 +352,11 @@ async function findBestToken() {
             console.log(`Description: ${selectedToken.token.description}`);
         }
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
+
         // Add token to purchased set and save
         purchasedTokens.add(selectedToken.token.address);
         savePurchasedTokens();
-        
+
         // Save to file for trader.js
         const bestToken = {
             address: selectedToken.token.address,
@@ -356,12 +364,12 @@ async function findBestToken() {
             name: selectedToken.token.name,
             info: selectedToken.info
         };
-        
+
         console.log('\nSaving selected token to file for trader...');
         fs.writeFileSync('selected_token.json', JSON.stringify(bestToken, null, 2));
         console.log('Token information saved successfully');
     }
-    
+
     return selectedToken;
 }
 
@@ -377,4 +385,4 @@ async function main() {
     }
 }
 
-main(); 
+main();

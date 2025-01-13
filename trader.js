@@ -43,7 +43,7 @@ function saveActiveTokens() {
         purchaseTime: data.purchaseTime,
         purchaseAmount: data.purchaseAmount
     }));
-    
+
     fs.writeFileSync('active_tokens.json', JSON.stringify(tokensData, null, 2));
     console.log('Active tokens saved');
 }
@@ -134,12 +134,12 @@ loadSoldTokensWithPnL();
 async function createConnection() {
     const currentEndpoint = RPC_ENDPOINTS[currentRpcIndex];
     // console.log(`Creating connection using RPC endpoint [${currentRpcIndex + 1}/${RPC_ENDPOINTS.length}]: ${currentEndpoint}`);
-    
+
     const options = {
         commitment: 'confirmed',
         confirmTransactionInitialTimeout: 1000,
-        wsEndpoint: currentEndpoint.startsWith('https://') ? 
-            currentEndpoint.replace('https://', 'wss://') : 
+        wsEndpoint: currentEndpoint.startsWith('https://') ?
+            currentEndpoint.replace('https://', 'wss://') :
             undefined
     };
 
@@ -163,7 +163,7 @@ async function getWorkingConnection() {
             // Switch to next RPC endpoint
             currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
             attempts++;
-            
+
             if (attempts < maxAttempts) {
                 // console.log(`Switching to next RPC endpoint [${currentRpcIndex + 1}/${RPC_ENDPOINTS.length}]: ${RPC_ENDPOINTS[currentRpcIndex]}`);
             }
@@ -186,7 +186,7 @@ async function withRpcRetry(operation) {
                 console.log(`Switched to RPC [${currentRpcIndex + 1}/${RPC_ENDPOINTS.length}]: ${RPC_ENDPOINTS[currentRpcIndex]}`);
                 const connection = await createConnection();
                 attempts++;
-                
+
                 if (attempts < maxAttempts) {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     continue;
@@ -202,7 +202,7 @@ async function getTokenMetadata(mintAddress) {
     try {
         const response = await fetch(`https://tokens.jup.ag/token/${mintAddress}`);
         const token = await response.json();
-        
+
         if (token) {
             return {
                 name: token.name,
@@ -265,11 +265,11 @@ async function getSolPrice() {
                     'User-Agent': 'Mozilla/5.0'
                 }
             });
-            
+
             if (response.ok) {
                 const data = await response.json();
                 const price = lastSuccessfulPriceApi.handler(data);
-                
+
                 if (price && !isNaN(price) && price > 0) {
                     // console.log(`Got SOL price from ${lastSuccessfulPriceApi.name}: $${price}`);
                     cachedSolPrice = price;
@@ -297,14 +297,14 @@ async function getSolPrice() {
                 },
                 timeout: 5000 // 5 second timeout
             });
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             const data = await response.json();
             const price = api.handler(data);
-            
+
             if (price && !isNaN(price) && price > 0) {
                 // console.log(`Got SOL price from ${api.name}: $${price}`);
                 lastSuccessfulPriceApi = api;
@@ -332,8 +332,15 @@ async function getDexScreenerInfo(tokenAddress) {
     try {
         const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
         const data = await response.json();
-        
         if (data.pairs && data.pairs.length > 0) {
+            // only get tokens coming from pumpfun
+            const isPumpFun = data.pairs.find(pair => pair.dexId === 'pumpfun');
+            if(!isPumpFun) {
+                console.log('[Trader] Token NOT from PUMPFUN skipping...');
+                return null;
+            }
+            console.log('[Trader] Token is from PUMPFUN returning info');
+
             const mainPair = data.pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
             return {
                 marketCap: mainPair.marketCap || 0,
@@ -384,14 +391,14 @@ async function customSendAndConfirmTransaction(connection, transaction, wallet, 
                 skipPreflight: true,
                 maxRetries: 2
             });
-            
+
             // console.log(`Transaction sent via RPC [${currentRpcIndex + 1}/${RPC_ENDPOINTS.length}]: ${RPC_ENDPOINTS[currentRpcIndex]}`);
             // console.log(`Signature: ${txid}`);
             // console.log(`View in Explorer: https://solscan.io/tx/${txid}`);
-            
+
             // Start async confirmation check
             checkTransactionConfirmation(connection, txid, blockhash, lastValidBlockHeight);
-            
+
             // Return signature immediately
             return txid;
         } catch (error) {
@@ -414,7 +421,7 @@ async function checkTransactionConfirmation(connection, signature, blockhash, la
             blockhash: blockhash,
             lastValidBlockHeight: lastValidBlockHeight
         }, 'confirmed');
-        
+
         if (confirmation?.value?.err) {
             console.error(`Transaction failed: ${confirmation.value.err}`);
         } else {
@@ -446,7 +453,7 @@ async function buyToken(connection, wallet, token) {
 
         const inputMint = "So11111111111111111111111111111111111111112"; // SOL
         const outputMint = token.address;
-        
+
         // Validate token address
         try {
             new PublicKey(outputMint);
@@ -480,12 +487,12 @@ async function buyToken(connection, wallet, token) {
         }
 
         console.log(`\nInitiating purchase of ${token.name} (${token.symbol})...`);
-        // console.log('Token details:');
-        // console.log(`- Address: ${outputMint}`);
-        // console.log(`- Symbol: ${token.symbol}`);
-        // console.log(`- Name: ${token.name}`);
-        // console.log(`- Liquidity: $${tokenInfo.liquidity.toLocaleString()}`);
-        
+        console.log('Token details:');
+        console.log(`- Address: ${outputMint}`);
+        console.log(`- Symbol: ${token.symbol}`);
+        console.log(`- Name: ${token.name}`);
+        console.log(`- Liquidity: $${tokenInfo.liquidity.toLocaleString()}`);
+
         // 1. Get quote from Jupiter with proper URL encoding
         const quoteUrl = new URL('https://quote-api.jup.ag/v6/quote');
         quoteUrl.searchParams.append('inputMint', inputMint);
@@ -494,14 +501,14 @@ async function buyToken(connection, wallet, token) {
         quoteUrl.searchParams.append('slippageBps', config.SLIPPAGE_BPS.toString());
         quoteUrl.searchParams.append('onlyDirectRoutes', 'false');
         quoteUrl.searchParams.append('asLegacyTransaction', 'false');
-        
+
         console.log('Requesting quote with URL:', quoteUrl.toString());
-        
-        const quoteResponse = await fetch(quoteUrl.toString(), { 
+
+        const quoteResponse = await fetch(quoteUrl.toString(), {
             headers: { 'Content-Type': 'application/json' },
             timeout: 10000
         });
-        
+
         if (!quoteResponse.ok) {
             const errorText = await quoteResponse.text();
             console.error('Quote API Error Response:', errorText);
@@ -513,10 +520,10 @@ async function buyToken(connection, wallet, token) {
             }
             throw new Error(`HTTP error! status: ${quoteResponse.status} - ${errorText}`);
         }
-        
+
         const quoteData = await quoteResponse.json();
         // console.log('Jupiter API response:', JSON.stringify(quoteData, null, 2));
-        
+
         // Verify the output token in the route matches our intended token
         if (quoteData.routePlan && quoteData.routePlan.length > 0) {
             const lastRoute = quoteData.routePlan[quoteData.routePlan.length - 1];
@@ -525,7 +532,7 @@ async function buyToken(connection, wallet, token) {
                 return false;
             }
         }
-        
+
         // Check if we have a valid route plan
         if (!quoteData || !quoteData.routePlan || quoteData.routePlan.length === 0) {
             throw new Error('No valid route plan received');
@@ -578,7 +585,7 @@ async function buyToken(connection, wallet, token) {
         // 4. Execute the transaction
         console.log('Sending buy transaction...');
         const signature = await customSendAndConfirmTransaction(connection, transaction, wallet);
-        
+
         // Start checking token balance immediately
         let retries = 0;
         const maxRetries = 10;
@@ -589,14 +596,14 @@ async function buyToken(connection, wallet, token) {
                 const tokenAccount = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, {
                     mint: new PublicKey(outputMint)
                 });
-                
-                const tokenBalance = tokenAccount.value.length > 0 
-                    ? tokenAccount.value[0].account.data.parsed.info.tokenAmount.uiAmount 
+
+                const tokenBalance = tokenAccount.value.length > 0
+                    ? tokenAccount.value[0].account.data.parsed.info.tokenAmount.uiAmount
                     : 0;
 
                 if (tokenBalance > 0) {
                     console.log('Purchase successful!\n');
-                    
+
                     // Add purchase time and amount to token data
                     activeTokens.set(token.address, {
                         name: token.name || 'Unknown',
@@ -607,10 +614,10 @@ async function buyToken(connection, wallet, token) {
                         purchaseTime: new Date().toISOString(),
                         purchaseAmount: tokenBalance
                     });
-                    
+
                     // Save to file immediately after purchase
                     saveActiveTokens();
-                    
+
                     console.log('Token added to active positions:', token.symbol);
                     const solPrice = await getSolPrice();
                     const updatedPositionsInfo = await getAllPositionsInfo(connection, wallet, solPrice);
@@ -644,12 +651,12 @@ async function buyToken(connection, wallet, token) {
 async function executeSell(connection, wallet, tokenAddress, tokenData, isTriggerSell = false) {
     try {
         console.log(`\nExecuting sell order...`);
-        
+
         // Get current token balance
         const tokenAccount = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, {
             mint: new PublicKey(tokenAddress)
         });
-        
+
         if (!tokenAccount.value.length) {
             console.error('No token account found for this token');
             return false;
@@ -678,7 +685,7 @@ async function executeSell(connection, wallet, tokenAddress, tokenData, isTrigge
             amount: tokenBalance,
             slippageBps: config.SELL_SLIPPAGE_BPS
         }));
-        
+
         const quoteData = await quoteResponse.json();
 
         // Validate output amount (minimum 0.00001 SOL = 10000 lamports)
@@ -720,11 +727,11 @@ async function executeSell(connection, wallet, tokenAddress, tokenData, isTrigge
         // 4. Execute the transaction
         console.log('Sending sell transaction...');
         const signature = await customSendAndConfirmTransaction(connection, transaction, wallet);
-        
+
         // After successful sell, save the P&L information
         if (isTriggerSell || await checkSaleSuccess(connection, wallet, tokenAddress)) {
             console.log(`Sale successful! P&L: ${profitLoss.toFixed(2)}%`);
-            
+
             // Add to sold positions with P&L info
             soldTokensWithPnL.set(tokenAddress, {
                 symbol: tokenData.symbol,
@@ -732,10 +739,10 @@ async function executeSell(connection, wallet, tokenAddress, tokenData, isTrigge
                 profitLoss: profitLoss,
                 soldAt: new Date().toISOString()
             });
-            
+
             // Save to file immediately
             saveSoldTokensWithPnL();
-            
+
             // Remove from active tokens and tracking
             activeTokens.delete(tokenAddress);
             tokenRemovalCandidates.delete(tokenAddress);
@@ -745,7 +752,7 @@ async function executeSell(connection, wallet, tokenAddress, tokenData, isTrigge
             const solPrice = await getSolPrice();
             const updatedPositionsInfo = await getAllPositionsInfo(connection, wallet, solPrice);
             wsClient.updateMonitoringInfo(updatedPositionsInfo);
-            
+
             return true;
         }
 
@@ -763,10 +770,10 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
     const walletBalanceUSD = walletBalanceSOL * solPrice;
 
     console.log(`Active tokens: ${activeTokens.size}`);
-    
+
     // Create a Map to track which tokens we've processed
     const processedTokens = new Map();
-    
+
     // First, check all tokens in the wallet
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, {
         programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
@@ -794,7 +801,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
             if (activeTokens.has(tokenAddress)) {
                 const tokenData = activeTokens.get(tokenAddress);
                 const tokenInfo = await getDexScreenerInfo(tokenAddress);
-                
+
                 if (tokenInfo) {
         const priceChange = ((tokenInfo.priceUsd - tokenData.initialPrice) / tokenData.initialPrice) * 100;
                     const positionValue = balance * tokenInfo.priceUsd;
@@ -809,7 +816,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
                         positionValue: positionValue,
                         purchaseTime: tokenData.purchaseTime
                     });
-                    
+
                     processedTokens.set(tokenAddress, true);
                 }
             } else {
@@ -817,7 +824,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
                 try {
                     const tokenInfo = await getDexScreenerInfo(tokenAddress);
                     const metadata = await getTokenMetadata(tokenAddress);
-                    
+
                     if (tokenInfo && metadata) {
                         activeTokens.set(tokenAddress, {
                             name: metadata.name,
@@ -828,7 +835,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
                             purchaseTime: new Date().toISOString(),
                             purchaseAmount: balance
                         });
-                        
+
                         positions.push({
                             symbol: metadata.symbol,
                             name: metadata.name,
@@ -838,7 +845,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
                             balance: balance,
                             positionValue: balance * tokenInfo.priceUsd
                         });
-                        
+
                         processedTokens.set(tokenAddress, true);
                         saveActiveTokens();
                     }
@@ -897,7 +904,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
                 symbol: token.symbol,
                 profitLoss: token.profitLoss
             })).sort((a, b) => new Date(b.soldAt) - new Date(a.soldAt));
-            
+
             console.log(`Loaded ${soldPositions.length} sold positions from file`);
         }
     } catch (error) {
@@ -911,7 +918,7 @@ async function getAllPositionsInfo(connection, wallet, solPrice) {
         walletBalanceUSD,
         lastUpdateTime: new Date().toLocaleTimeString()
     };
-    
+
     return result;
 }
 
@@ -922,7 +929,7 @@ async function monitorPositions(connection, wallet) {
             if (fs.existsSync('selected_token.json')) {
                 const data = fs.readFileSync('selected_token.json', 'utf8');
                 let selectedToken;
-                
+
                 try {
                     selectedToken = JSON.parse(data);
                 } catch (error) {
@@ -939,7 +946,7 @@ async function monitorPositions(connection, wallet) {
                     fs.unlinkSync('selected_token.json');
                     continue;
                 }
-                
+
                 const tokenInfo = await getDexScreenerInfo(selectedToken.address);
                 if (!tokenInfo || !tokenInfo.liquidity || tokenInfo.liquidity < 1000 || !tokenInfo.priceUsd || tokenInfo.priceUsd <= 0) {
                     fs.unlinkSync('selected_token.json');
@@ -952,7 +959,7 @@ async function monitorPositions(connection, wallet) {
                     symbol: selectedToken.symbol || 'Unknown',
                     info: tokenInfo
                 };
-                
+
                 const success = await buyToken(connection, wallet, tokenData);
                 if (success) {
                     activeTokens.set(selectedToken.address, {
@@ -962,7 +969,7 @@ async function monitorPositions(connection, wallet) {
                         initialLiquidity: tokenInfo.liquidity,
                         address: selectedToken.address
                     });
-                    
+
                     console.log('Token added to active positions:', selectedToken.symbol);
                     const solPrice = await getSolPrice();
                     const updatedPositionsInfo = await getAllPositionsInfo(connection, wallet, solPrice);
@@ -970,12 +977,12 @@ async function monitorPositions(connection, wallet) {
                     fs.unlinkSync('selected_token.json');
                 }
             }
-            
+
             // Update positions every 10 seconds
             const solPrice = await getSolPrice();
             const allPositionsInfo = await getAllPositionsInfo(connection, wallet, solPrice);
             wsClient.updateMonitoringInfo(allPositionsInfo);
-            
+
             // Check for sell conditions
             for (const [address, tokenData] of activeTokens) {
                 const position = allPositionsInfo.positions.find(p => p.symbol === tokenData.symbol);
@@ -983,6 +990,12 @@ async function monitorPositions(connection, wallet) {
 
                 const tokenInfo = await getDexScreenerInfo(address);
                 if (tokenInfo) {
+
+                    if (tokenInfo.liquidity <= 100) {
+                        console.log('Token Rugged skipping sell: ', tokenData.symbol);
+                        continue;
+                    }
+
                     const liquidityDropPercentage = ((tokenData.initialLiquidity - tokenInfo.liquidity) / tokenData.initialLiquidity) * 100;
                     if (liquidityDropPercentage > 50) {
                         console.log(`\n=== Emergency Sell: ${tokenData.symbol} ===`);
@@ -995,7 +1008,7 @@ async function monitorPositions(connection, wallet) {
                     }
                 }
 
-                if (position.priceChange <= -config.STOP_LOSS_PERCENTAGE || 
+                if (position.priceChange <= -config.STOP_LOSS_PERCENTAGE ||
                     position.priceChange >= config.TAKE_PROFIT_PERCENTAGE) {
                     console.log(`\n=== Selling ${tokenData.symbol} ===`);
                     console.log(`• Price change: ${position.priceChange.toFixed(2)}%`);
@@ -1005,7 +1018,7 @@ async function monitorPositions(connection, wallet) {
                     }
                 }
             }
-            
+
             // Wait 10 seconds before next update
             await new Promise(resolve => setTimeout(resolve, 10000));
         } catch (error) {
@@ -1022,7 +1035,7 @@ async function getTokenBalance(connection, tokenMint, owner) {
         const tokenAccounts = await connection.getParsedTokenAccountsByOwner(owner, {
             mint: new PublicKey(tokenMint)
         });
-        
+
         if (tokenAccounts.value.length > 0) {
             const balance = tokenAccounts.value[0].account.data.parsed.info.tokenAmount.uiAmount;
             return balance > 0 ? balance : 0;
@@ -1041,7 +1054,7 @@ async function verifyTokensInWallet() {
         });
 
         console.log(`Found ${tokenAccounts.value.length} token accounts in wallet`);
-        
+
         // Update token account cache
         tokenAccountCache.clear();
         for (const { account, pubkey } of tokenAccounts.value) {
@@ -1058,7 +1071,7 @@ async function verifyTokensInWallet() {
         // Check active tokens against cache
         for (const [tokenAddress, tokenData] of activeTokens.entries()) {
             const cachedData = tokenAccountCache.get(tokenAddress);
-            
+
             if (!cachedData) {
                 // Only mark for removal if we haven't seen the token for more than 2 minutes
                 if (!tokenData.lastSeen || Date.now() - tokenData.lastSeen > 120000) {
@@ -1113,17 +1126,17 @@ async function startMonitoring() {
     while (true) {
         try {
             await verifyTokensInWallet();
-            
+
             // Get positions info and send update
             const positionsInfo = await getAllPositionsInfo();
             if (wsClient) {
                 wsClient.updateMonitoringInfo(positionsInfo);
             }
-            
+
         } catch (error) {
             console.error('Error in monitoring loop:', error);
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 10000));
     }
 }
@@ -1138,10 +1151,10 @@ async function main() {
             privateKeyArray = Array.from(bs58.decode(config.PRIVATE_KEY));
         }
         const wallet = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
-        
+
         console.log('Starting trader...');
         console.log(`Wallet address: ${wallet.publicKey.toString()}`);
-        
+
         // Wrap the monitoring function with RPC retry logic
         while (true) {
             try {
@@ -1178,4 +1191,4 @@ getDexScreenerInfo = async function(tokenAddress) {
     return withRpcRetry(() => originalGetDexScreenerInfo(tokenAddress));
 };
 
-main(); 
+main();

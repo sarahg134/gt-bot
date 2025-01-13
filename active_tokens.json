@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "address": "2NqvK4WjcGnFn4bmTJgfhwXonF36NFm8U3MEQZnSWNRD",
+    "name": "HISPANIC CAT",
+    "symbol": "CATTO",
+    "initialPrice": 0.0001792,
+    "initialLiquidity": 71149.17,
+    "purchaseTime": "2025-01-13T17:44:10.928Z",
+    "purchaseAmount": 95765.430216
+  },
+  {
+    "address": "62ZiwfjUj8rihfYyBUTL4P1ftzCkvLqT7ivqtSBwpump",
+    "name": "sachi",
+    "symbol": "sachi",
+    "initialPrice": 0.0001249,
+    "initialLiquidity": 45625.57,
+    "purchaseTime": "2025-01-13T17:54:15.721Z",
+    "purchaseAmount": 140217.391323
+  },
+  {
+    "address": "E31cR1xkrGthHaTxgnME7LeWPmmbasSAHjgGT5G2pump",
+    "name": "AION AI",
+    "symbol": "AION",
+    "initialPrice": 0.000201,
+    "initialLiquidity": 106238.71,
+    "purchaseTime": "2025-01-13T18:04:33.347Z",
+    "purchaseAmount": 90471.389295
+  },
+  {
+    "address": "2HQHHtjPYTLBqJEJ387ZTu9Cmr9mc6z8ZBhzGXkfpump",
+    "name": "ryū",
+    "symbol": "ryu",
+    "initialPrice": 0.00003776,
+    "initialLiquidity": 23937,
+    "purchaseTime": "2025-01-13T18:46:21.304Z",
+    "purchaseAmount": 240590.5628
+  }
+]
